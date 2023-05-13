@@ -3,6 +3,8 @@ Color Thief
 
 A Python module for grabbing the color palette from an image.
 
+This repository is a fork that includes mypyc builds of the module. This yields an approximate 2x speed boost when analyzing images. 
+
 Installation
 ------------
 

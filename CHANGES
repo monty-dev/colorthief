@@ -21,3 +21,12 @@ Version 0.2.1
 Released on Feb 9th 2017
 
 - Removed useless list creation
+
+
+Version 1.0
+-------------
+
+Released on May 13th 2023
+
+- Added type annotations to colorthief.py. Yield 200% speedboost when installed with mypyc. 
+- Updated project to pyproject.toml with mypyc builds.
