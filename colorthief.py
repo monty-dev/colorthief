@@ -69,7 +69,7 @@ class ColorThief(object):
             r, g, b, a = pixels[i]
             # If pixel is mostly opaque and not white
             if a >= 125:
-                if not (r > 250 and g > 250 and b > 250):
+                if r <= 250 or g <= 250 or b <= 250:
                     valid_pixels.append((r, g, b))
 
         # Send array to quantize function which clusters values
@@ -97,7 +97,7 @@ class MMCQ(object):
         """histo (1-d array, giving the number of pixels in each quantized
         region of color space)
         """
-        histo = dict()
+        histo = {}
         for pixel in pixels:
             rval = pixel[0] >> MMCQ.RSHIFT
             gval = pixel[1] >> MMCQ.RSHIFT
@@ -142,7 +142,6 @@ class MMCQ(object):
         total = 0
         sum_ = 0
         partialsum = {}
-        lookaheadsum = {}
         do_cut_color = None
         if maxw == rw:
             do_cut_color = 'r'
@@ -174,12 +173,10 @@ class MMCQ(object):
                         sum_ += histo.get(index, 0)
                 total += sum_
                 partialsum[i] = total
-        for i, d in partialsum.items():
-            lookaheadsum[i] = total - d
-
+        lookaheadsum = {i: total - d for i, d in partialsum.items()}
         # determine the cut planes
-        dim1 = do_cut_color + '1'
-        dim2 = do_cut_color + '2'
+        dim1 = f'{do_cut_color}1'
+        dim2 = f'{do_cut_color}2'
         dim1_val = getattr(vbox, dim1)
         dim2_val = getattr(vbox, dim2)
         for i in range(dim1_val, dim2_val+1):
