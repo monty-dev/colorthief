@@ -1,28 +1,37 @@
-"""
-    colorthief
-    ~~~~~~~~~~
+"""colorthief
+~~~~~~~~~~.
 
-    Grabbing the color palette from an image.
+Grabbing the color palette from an image.
 
-    :copyright: (c) 2015 by Shipeng Feng.
-    :license: BSD, see LICENSE for more details.
+:copyright: (c) 2015 by Shipeng Feng.
+:copyright: (c) 2023 by Montel Edwards.
+
+
+:license: BSD, see LICENSE for more details.
 """
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from pathlib import PosixPath
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any
 
 from PIL import Image
 
-__version__ = "2.0"
+__version__ = "2.1"
+
+
 SIGBITS = 5
 RSHIFT = 8 - SIGBITS
 MAX_ITERATION = 1000
 FRACT_BY_POPULATIONS = 0.75
 
 
-class ColorThief(object):
+class BoringImageError(Exception):
+    """Raised when an deson't have enough color to it to build a pallete."""
+
+
+class ColorThief:
     """Color thief main class."""
 
     def __init__(self, file: PosixPath) -> None:
@@ -34,7 +43,7 @@ class ColorThief(object):
         """
         self.image = Image.open(file)
 
-    def get_color(self, quality: int = 10) -> Tuple[int, int, int]:
+    def get_color(self, quality: int = 10) -> tuple[int, int, int]:
         """Get the dominant color.
 
         :param quality: quality settings, 1 is the highest quality, the bigger
@@ -46,7 +55,7 @@ class ColorThief(object):
         palette = self.get_palette(5, quality)
         return palette[0]
 
-    def get_palette(self, color_count: int = 10, quality: int = 10) -> List[Tuple[int, int, int]]:
+    def get_palette(self, color_count: int = 10, quality: int = 10) -> list[tuple[int, int, int]]:
         """Build a color palette.  We are using the median cut algorithm to
         cluster similar colors.
 
@@ -56,7 +65,12 @@ class ColorThief(object):
                         greater the likelihood that colors will be missed.
         :return list: a list of tuple in the form (r, g, b)
         """
+        if self.image.n_frames > 2:
+            target = self.image.n_frames // 2
+            self.image.seek(target)
+            
         image = self.image.convert("RGBA")
+
         width, height = image.size
         pixels = image.getdata()
         pixel_count = width * height
@@ -64,9 +78,8 @@ class ColorThief(object):
         for i in range(0, pixel_count, quality):
             r, g, b, a = pixels[i]
             # If pixel is mostly opaque and not white
-            if a >= 125:
-                if not (r > 250 and g > 250 and b > 250):
-                    valid_pixels.append((r, g, b))
+            if a >= 125 and (r <= 250 or g <= 250 or b <= 250):
+                valid_pixels.append((r, g, b))
 
         # Send array to quantize function which clusters values
         # using median cut algorithm
@@ -74,10 +87,10 @@ class ColorThief(object):
         return cmap.palette
 
 
-class VBox(object):
-    """3d color space box"""
+class VBox:
+    """3d color space box."""
 
-    def __init__(self, r1: int, r2: int, g1: int, g2: int, b1: int, b2: int, histo: Dict[int, int]) -> None:
+    def __init__(self, r1: int, r2: int, g1: int, g2: int, b1: int, b2: int, histo: dict[int, int]) -> None:
         self.r1 = r1
         self.r2 = r2
         self.g1 = g1
@@ -98,7 +111,7 @@ class VBox(object):
         return self._volume
 
     @property
-    def copy(self) -> "VBox":
+    def copy(self) -> VBox:
         return VBox(self.r1, self.r2, self.g1, self.g2, self.b1, self.b2, self.histo)
 
     def avg(self) -> tuple[int, int, int]:
@@ -147,7 +160,7 @@ class VBox(object):
         return self._count
 
 
-class MMCQ(object):
+class MMCQ:
     """Basic Python port of the MMCQ (modified median cut quantization)
     algorithm from the Leptonica library (http://www.leptonica.com/).
     """
@@ -157,11 +170,11 @@ class MMCQ(object):
         return (r << (2 * SIGBITS)) + (g << SIGBITS) + b
 
     @staticmethod
-    def get_histo(pixels: List[Tuple[int, int, int]]) -> Dict[int, int]:
-        """histo (1-d array, giving the number of pixels in each quantized
-        region of color space)
+    def get_histo(pixels: list[tuple[int, int, int]]) -> dict[int, int]:
+        """Histo (1-d array, giving the number of pixels in each quantized
+        region of color space).
         """
-        histo: Dict[int, int] = dict()
+        histo: dict[int, int] = {}
         for pixel in pixels:
             rval = pixel[0] >> RSHIFT
             gval = pixel[1] >> RSHIFT
@@ -171,7 +184,7 @@ class MMCQ(object):
         return histo
 
     @staticmethod
-    def vbox_from_pixels(pixels: List[Tuple[int, int, int]], histo: Dict[int, int]) -> "VBox":
+    def vbox_from_pixels(pixels: list[tuple[int, int, int]], histo: dict[int, int]) -> VBox:
         rmin = 1000000
         rmax = 0
         gmin = 1000000
@@ -191,7 +204,7 @@ class MMCQ(object):
         return VBox(rmin, rmax, gmin, gmax, bmin, bmax, histo)
 
     @staticmethod
-    def median_cut_apply(histo: Dict[int, int], vbox: VBox) -> Tuple[VBox | None, VBox | None]:
+    def median_cut_apply(histo: dict[int, int], vbox: VBox) -> tuple[VBox | None, VBox | None]:
         if not vbox.count():
             return (None, None)
 
@@ -206,7 +219,6 @@ class MMCQ(object):
         total = 0
         sum_ = 0
         partialsum = {}
-        lookaheadsum = {}
         do_cut_color = None
         if maxw == rw:
             do_cut_color = "r"
@@ -238,9 +250,7 @@ class MMCQ(object):
                         sum_ += histo.get(index, 0)
                 total += sum_
                 partialsum[i] = total
-        for i, d in partialsum.items():
-            lookaheadsum[i] = total - d
-
+        lookaheadsum = {i: total - d for i, d in partialsum.items()}
         # determine the cut planes
         dim1 = do_cut_color + "1"
         dim2 = do_cut_color + "2"
@@ -270,16 +280,18 @@ class MMCQ(object):
         return (None, None)
 
     @staticmethod
-    def quantize(pixels: List[Tuple[int, int, int]], max_color: int) -> "CMap":
+    def quantize(pixels: list[tuple[int, int, int]], max_color: int) -> CMap:
         """Quantize.
 
         :param pixels: a list of pixel in the form (r, g, b)
         :param max_color: max number of colors
         """
         if not pixels:
-            raise Exception("Empty pixels when quantize.")
+            msg = "Empty pixels when quantize."
+            raise BoringImageError(msg)
         if max_color < 2 or max_color > 256:
-            raise Exception("Wrong number of max colors when quantize.")
+            msg = "Wrong number of max colors when quantize."
+            raise ValueError(msg)
 
         histo = MMCQ.get_histo(pixels)
 
@@ -306,7 +318,8 @@ class MMCQ(object):
                 # do the cut
                 vbox1, vbox2 = MMCQ.median_cut_apply(histo, vbox)
                 if not vbox1:
-                    raise Exception("vbox1 not defined; shouldn't happen!")
+                    msg = "vbox1 not defined; shouldn't happen!"
+                    raise ValueError(msg)
                 lh.push(vbox1)
                 if vbox2:  # vbox2 can be null
                     lh.push(vbox2)
@@ -336,14 +349,14 @@ class MMCQ(object):
         return cmap
 
 
-class CMap(object):
-    """Color map"""
+class CMap:
+    """Color map."""
 
     def __init__(self) -> None:
         self.vboxes = PQueue(lambda x: x["vbox"].count() * x["vbox"].volume())
 
     @property
-    def palette(self) -> List[Tuple[int, int, int]]:
+    def palette(self) -> list[tuple[int, int, int]]:
         return self.vboxes.map(lambda x: x["color"])
 
     def push(self, vbox: VBox) -> None:
@@ -371,7 +384,7 @@ class CMap(object):
         return self.nearest(color)
 
 
-class PQueue(object):
+class PQueue:
     """Simple priority queue."""
 
     def __init__(self, sort_key: Callable) -> None:
@@ -402,5 +415,5 @@ class PQueue(object):
     def size(self) -> int:
         return len(self.contents)
 
-    def map(self, f: Callable) -> List[Tuple[int, int, int]]:
+    def map(self, f: Callable) -> list[tuple[int, int, int]]:
         return list(map(f, self.contents))

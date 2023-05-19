@@ -1,0 +1,8 @@
+
+[[rule]]
+
+[rule.formatting]
+align_entries   = true
+compact_entries = false
+indent_string   = "    "
+reorder_keys    = true
